@@ -14,7 +14,7 @@ var rootCmd = &cobra.Command{
 	Short: "Suspicious site checker",
 	Long: "A small utility to verify SSL/TLS certificates of a website and also if it's approved by an online web filter",
 	RunE: func(_ *cobra.Command, args []string) error {
-		addrParser.Parse(args)
+		addrParser.NewSites(args)
 		certParser.Get("google.com", "443")
 		return nil;
 	},

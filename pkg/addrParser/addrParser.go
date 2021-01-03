@@ -5,46 +5,91 @@ import (
 	"strings"
 	"net"
 	"net/url"
-	"sync"
+	// "sync"
+	"strconv"
 )
 
-const defaultPort = "443"
-const defaultProto = "https"
+const (
+	HTTP	= iota
+	HTTPS
+)
 
-var wg sync.WaitGroup
-
-func Parse(addrs []string) {
-	for _, addr := range addrs {
-		wg.Add(1)
-		go parseSingle(addr)
-	}
-	wg.Wait()
+var Proto = map[string]uint8{
+	"http":		HTTP,
+	"https":	HTTPS,
 }
 
-func parseSingle(addr string) {
-	var site string
-	var proto string
-	if strings.HasPrefix(addr, "http") {
-		// TODO: Take care of errors
-		u, _ := url.Parse(addr)
-		site = u.Host
-		proto = u.Scheme
-	} else {
-		site = addr
-		proto = defaultProto
-	}
+var ProtoPort = map[uint8]uint16{
+	HTTP:	80,
+	HTTPS:	443,
+}
 
-	if !strings.Contains(site, ":") {
-		fmt.Println("Protocol:" + proto + " Site:" + site + " Port:" + defaultPort)
-		wg.Done()
+type Site struct {
+	Protocol	uint8
+	Host		string
+	Port	    uint16
+}
+
+const defaultProto = HTTPS
+
+func NewSites(addrs []string) {
+	// var wg sync.WaitGroup
+	var done = make(chan *Site)
+	defer close(done)
+	for _, addr := range addrs {
+		// wg.Add(1)
+		go newSiteConcur(addr, done)
+		// wg.Done()
+	}
+	fmt.Println(<-done)
+	fmt.Println(<-done)
+	fmt.Println(<-done)
+}
+
+func newSiteConcur(addr string, done chan<- *Site) {
+	Site, err := NewSite(addr)
+	if err != nil {
+		// TODO: Return errors on a separate channel
+		fmt.Println(err)
 		return
 	}
-	site, port, err := net.SplitHostPort(site)
+	done<- Site
+}
+
+func NewSite(addr string) (*Site, error) {
+	site, err := parseAddrWithProto(addr)
+
+	if !strings.Contains(site.Host, ":") {
+		return	site, nil
+	}
+	var port string
+	site.Host, port, err = net.SplitHostPort(site.Host)
 	if err == nil {
-		fmt.Println("Protocol:" + proto + " Site:" + site + " Port:" + port)
-		wg.Done()
-		return
+		//TODO: Manage port out of range error
+		uintport, _ := strconv.ParseUint(port, 10, 16)
+		site.Port = uint16(uintport)
+		return site, nil
 	}
-	fmt.Println(err)
-	wg.Done()
+	return &Site{}, nil
+}
+
+func parseAddrWithProto(addr string) (site *Site, err error) {
+	if strings.HasPrefix(addr, "http") {
+		u, err := url.Parse(addr)
+		if err != nil {
+			return &Site{}, err
+		}
+		return	&Site{
+					Protocol: Proto[u.Scheme],
+					Host: u.Host,
+					Port: ProtoPort[Proto[u.Scheme]],
+				},
+				nil
+	}
+	return	&Site{
+				Protocol: defaultProto,
+				Host: addr,
+				Port: ProtoPort[defaultProto],
+			},
+			nil
 }
