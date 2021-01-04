@@ -34,7 +34,7 @@ const defaultProto = HTTPS
 
 func NewSites(addrs []string) {
 	// var wg sync.WaitGroup
-	var done = make(chan *Site)
+	var done = make(chan Site)
 	defer close(done)
 	for _, addr := range addrs {
 		// wg.Add(1)
@@ -46,7 +46,7 @@ func NewSites(addrs []string) {
 	fmt.Println(<-done)
 }
 
-func newSiteConcur(addr string, done chan<- *Site) {
+func newSiteConcur(addr string, done chan<- Site) {
 	Site, err := NewSite(addr)
 	if err != nil {
 		// TODO: Return errors on a separate channel
@@ -56,7 +56,7 @@ func newSiteConcur(addr string, done chan<- *Site) {
 	done<- Site
 }
 
-func NewSite(addr string) (*Site, error) {
+func NewSite(addr string) (Site, error) {
 	site, err := parseAddrWithProto(addr)
 
 	if !strings.Contains(site.Host, ":") {
@@ -70,26 +70,30 @@ func NewSite(addr string) (*Site, error) {
 		site.Port = uint16(uintport)
 		return site, nil
 	}
-	return &Site{}, nil
+	return Site{}, nil
 }
 
-func parseAddrWithProto(addr string) (site *Site, err error) {
+func parseAddrWithProto(addr string) (site Site, err error) {
 	if strings.HasPrefix(addr, "http") {
 		u, err := url.Parse(addr)
 		if err != nil {
-			return &Site{}, err
+			return Site{}, err
 		}
-		return	&Site{
+		return	Site{
 					Protocol: Proto[u.Scheme],
 					Host: u.Host,
 					Port: ProtoPort[Proto[u.Scheme]],
 				},
 				nil
 	}
-	return	&Site{
+	return	Site{
 				Protocol: defaultProto,
 				Host: addr,
 				Port: ProtoPort[defaultProto],
 			},
 			nil
+}
+
+func (s Site) Addr() string {
+	return s.Host + ":" + strconv.Itoa(int(s.Port))
 }

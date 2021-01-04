@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"os"
-	"github.com/darthrevan13/issuspicous/pkg/addrParser"
+	// "github.com/darthrevan13/issuspicous/pkg/addrParser"
 	"github.com/darthrevan13/issuspicous/pkg/certParser"
 
 )
@@ -14,8 +14,9 @@ var rootCmd = &cobra.Command{
 	Short: "Suspicious site checker",
 	Long: "A small utility to verify SSL/TLS certificates of a website and also if it's approved by an online web filter",
 	RunE: func(_ *cobra.Command, args []string) error {
-		addrParser.NewSites(args)
-		certParser.Get("google.com", "443")
+		// addrParser.NewSites(args)
+		c, _ := certParser.NewCertificate("https://google.com")
+		fmt.Println(c.CertificateInfo())
 		return nil;
 	},
 }
