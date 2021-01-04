@@ -5,7 +5,7 @@ import (
 	"strings"
 	"net"
 	"net/url"
-	// "sync"
+	"sync"
 	"strconv"
 )
 
@@ -32,28 +32,30 @@ type Site struct {
 
 const defaultProto = HTTPS
 
-func NewSites(addrs []string) {
-	// var wg sync.WaitGroup
+func NewSites(addrs []string) <-chan Site {
 	var done = make(chan Site)
-	defer close(done)
+	var wg sync.WaitGroup
 	for _, addr := range addrs {
-		// wg.Add(1)
-		go newSiteConcur(addr, done)
-		// wg.Done()
+		wg.Add(1)
+		go newSiteConcur(addr, done, &wg)
 	}
-	fmt.Println(<-done)
-	fmt.Println(<-done)
-	fmt.Println(<-done)
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	return done
 }
 
-func newSiteConcur(addr string, done chan<- Site) {
+func newSiteConcur(addr string, done chan<- Site, wg *sync.WaitGroup) {
 	Site, err := NewSite(addr)
 	if err != nil {
 		// TODO: Return errors on a separate channel
 		fmt.Println(err)
+		wg.Done()
 		return
 	}
 	done<- Site
+	wg.Done()
 }
 
 func NewSite(addr string) (Site, error) {

@@ -4,13 +4,14 @@ import (
 	"crypto/tls"
 	"net"
 	"time"
-	// "fmt"
+	"fmt"
 	"bytes"
 	"text/template"
+	"sync"
 	"github.com/darthrevan13/issuspicous/pkg/addrParser"
 )
 
-type Certificate struct {
+type Cert struct {
 	Addr		addrParser.Site
 	Subject		string
 	Issuer		string
@@ -19,10 +20,10 @@ type Certificate struct {
 
 }
 
-const certInfoTempl = `Subject:	{{.Subject}}
-Issuer:		{{.Issuer}}
-SANs:		{{.SANs}}
-Validity:	{{.Validity}}`
+const certInfoTempl = `Subject:		{{.Subject}}
+Issuer:			{{.Issuer}}
+SANs:			{{.SANs}}
+Validity:		{{.Validity}}`
 
 const defaultTimeoutSeconds = 3
 const insecureSkipVerify = false
@@ -45,9 +46,13 @@ var cipherSuites = []uint16{
 	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 }
 
-func NewCertificate(addr string) (Certificate, error) {
+func NewCert(addr string) (Cert, error) {
 	// TODO: Handle errors
 	site, _ := addrParser.NewSite(addr)
+	return NewCertFromSite(site)
+}
+
+func NewCertFromSite(site addrParser.Site) (Cert, error) {
 	d := &net.Dialer{
 			Timeout: time.Duration(defaultTimeoutSeconds) * time.Second,
 	}
@@ -63,7 +68,7 @@ func NewCertificate(addr string) (Certificate, error) {
 	certChain := conn.ConnectionState().PeerCertificates
 	cert := certChain[0]
 
-	return	Certificate{
+	return	Cert{
 				Addr:		site,
 				Subject:	cert.Subject.CommonName,
 				Issuer:		cert.Issuer.CommonName,
@@ -73,7 +78,35 @@ func NewCertificate(addr string) (Certificate, error) {
 			nil
 }
 
-func (c Certificate) CertificateInfo() string {
+// TODO: Refactor common approach to concurency between addrParser and certParser
+func NewCerts(addrs []string) <-chan Cert {
+	sitesChan := addrParser.NewSites(addrs)
+	var done = make(chan Cert)
+	var wg sync.WaitGroup
+	for site := range sitesChan {
+		wg.Add(1)
+		go newCertFromSiteConcur(site, done, &wg)
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	return done
+}
+
+func newCertFromSiteConcur(site addrParser.Site, done chan<- Cert, wg *sync.WaitGroup) {
+	// TODO: Send errors to separate channel
+	cert, err := NewCertFromSite(site)
+	if err != nil {
+		fmt.Println(err)
+		wg.Done()
+		return
+	}
+	done<- cert
+	wg.Done()
+}
+
+func (c Cert) CertificateInfo() string {
 	var b bytes.Buffer
 
 	t := template.Must(template.New("default").Parse(certInfoTempl))
